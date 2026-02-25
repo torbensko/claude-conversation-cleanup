@@ -5,6 +5,26 @@ import type { ConversationEntry } from "../types/conversations";
 
 const CLAUDE_PROJECTS_DIR = path.join(homedir(), ".claude", "projects");
 
+function stripXmlTags(text: string): string {
+  return text.replace(/<[^>]+>/g, "").trim();
+}
+
+function decodeProjectName(dirName: string): string {
+  // Try to read sessions-index.json for originalPath first
+  const indexPath = path.join(CLAUDE_PROJECTS_DIR, dirName, "sessions-index.json");
+  try {
+    if (fs.existsSync(indexPath)) {
+      const data = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
+      if (data.originalPath) return path.basename(data.originalPath);
+    }
+  } catch {
+    // fall through
+  }
+  // Heuristic: last segment after splitting on common path patterns
+  const parts = dirName.replace(/^-/, "").split("-");
+  return parts[parts.length - 1] || dirName;
+}
+
 function readSessionsIndex(projectDir: string): ConversationEntry[] {
   const indexPath = path.join(projectDir, "sessions-index.json");
 
@@ -22,7 +42,7 @@ function readSessionsIndex(projectDir: string): ConversationEntry[] {
       .map((entry: Record<string, unknown>) => ({
         sessionId: entry.sessionId as string,
         fullPath: entry.fullPath as string,
-        firstPrompt: (entry.firstPrompt as string) || "No prompt",
+        firstPrompt: stripXmlTags((entry.firstPrompt as string) || "No prompt"),
         summary: entry.summary as string | undefined,
         messageCount: (entry.messageCount as number) || 0,
         created: entry.created as string,
@@ -44,7 +64,8 @@ function scanJsonlFiles(projectDir: string): ConversationEntry[] {
       (f) => f.endsWith(".jsonl") && !f.includes(path.sep)
     );
 
-    const projectName = path.basename(projectDir);
+    const dirName = path.basename(projectDir);
+    const projectName = decodeProjectName(dirName);
 
     return jsonlFiles.map((file) => {
       const fullPath = path.join(projectDir, file);
@@ -61,13 +82,13 @@ function scanJsonlFiles(projectDir: string): ConversationEntry[] {
           if (parsed.type === "user" && !parsed.isMeta && parsed.message?.content) {
             const content = parsed.message.content;
             if (typeof content === "string") {
-              firstPrompt = content.slice(0, 100);
+              firstPrompt = stripXmlTags(content).slice(0, 100);
             } else if (Array.isArray(content)) {
               const textBlock = content.find(
                 (b: { type: string }) => b.type === "text"
               );
               if (textBlock?.text) {
-                firstPrompt = textBlock.text.slice(0, 100);
+                firstPrompt = stripXmlTags(textBlock.text).slice(0, 100);
               }
             }
             break;

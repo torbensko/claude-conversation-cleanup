@@ -45,17 +45,16 @@ export function ConversationItem({
           : "hover:bg-accent/50 text-foreground"
       )}
     >
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <p className="text-sm font-medium line-clamp-2 flex-1">{title}</p>
-        <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+      {/* Title - wraps up to 3 lines */}
+      <p className="text-sm font-medium line-clamp-3 mb-1.5">{title}</p>
+
+      {/* Metadata row */}
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+        <span className="shrink-0">
           {formatRelativeDate(conversation.modified)}
         </span>
-      </div>
-
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {conversation.projectName && (
-          <span className="truncate">{conversation.projectName}</span>
-        )}
+        <span className="text-border">|</span>
+        <span className="truncate">{conversation.projectName}</span>
         {conversation.gitBranch && (
           <Badge
             variant="secondary"
