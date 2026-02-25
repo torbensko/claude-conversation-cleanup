@@ -1,8 +1,37 @@
-An app to review your Claude Code conversations. These are typically stored at ~/.claude/projects in a JSON format. This electron app allows you to:
+# Claude Conversations
 
-- view all conversations by chronological order (most recent first)
-- filter by projects
-- view all messages in a conversation
-- allow individual messages to be deleted
+An Electron app to review and manage your Claude Code conversation history. Conversations are stored at `~/.claude/projects/` as JSONL files — this app gives you a visual interface to browse them and surgically rewind when Claude gets stuck.
 
-This app is ideal for when Claude has hit an issue and you need to manually rewind (Claude doesn't always recover in these scenarios).
+## Features
+
+- View all conversations in chronological order (most recent first)
+- Filter by project (persisted between sessions)
+- Search conversations by prompt or summary
+- View all messages with collapsible thinking blocks and tool use/result details
+- Delete individual messages to rewind a conversation (with automatic backups)
+
+## Getting Started
+
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run dev
+```
+
+## Build
+
+```bash
+# Package the app
+npm run build
+
+# Create distributable installer
+npm run make
+```
+
+## Stack
+
+- Electron Forge + Vite
+- React 18 + TypeScript
+- Shadcn UI (zinc/dark theme) + Tailwind CSS v4
