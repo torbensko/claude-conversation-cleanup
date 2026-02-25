@@ -2,6 +2,8 @@
 
 An Electron app to review and manage your Claude Code conversation history. Conversations are stored at `~/.claude/projects/` as JSONL files — this app gives you a visual interface to browse them and surgically rewind when Claude gets stuck.
 
+![Screenshot](docs/screenshot.jpg)
+
 ## Features
 
 - View all conversations in chronological order (most recent first)

@@ -1,5 +1,5 @@
 {
-  "name": "claude-conversations",
+  "name": "claude-conversation-cleanup",
   "productName": "Claude Conversations",
   "description": "View and manage Claude Code conversation history with message rewind support",
   "license": "MIT",

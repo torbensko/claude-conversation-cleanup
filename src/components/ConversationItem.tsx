@@ -46,15 +46,18 @@ export function ConversationItem({
       )}
     >
       {/* Title - wraps up to 3 lines */}
-      <p className="text-sm font-medium line-clamp-3 mb-1.5">{title}</p>
+      <p className="text-sm font-medium line-clamp-3">{title}</p>
+
+      {/* Project short name */}
+      <p className="text-xs text-muted-foreground truncate mt-0.5 mb-1.5">
+        {conversation.projectName}
+      </p>
 
       {/* Metadata row */}
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
         <span className="shrink-0">
           {formatRelativeDate(conversation.modified)}
         </span>
-        <span className="text-border">|</span>
-        <span className="truncate">{conversation.projectName}</span>
         {conversation.gitBranch && (
           <Badge
             variant="secondary"

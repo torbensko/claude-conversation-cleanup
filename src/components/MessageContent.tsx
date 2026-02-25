@@ -1,12 +1,5 @@
 import type { ContentBlock } from "@/types/conversations";
 import { cn } from "@/lib/utils";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { ChevronRight, Brain } from "lucide-react";
-import { useState } from "react";
 import Markdown from "react-markdown";
 
 interface MessageContentProps {
@@ -83,35 +76,8 @@ export function MessageContent({ content, isUser }: MessageContentProps) {
         if (block.type === "text") {
           return <MarkdownText key={i} text={block.text || ""} isUser={isUser} />;
         }
-        if (block.type === "thinking") {
-          return <ThinkingBlock key={i} content={block.thinking || ""} />;
-        }
         return null;
       })}
     </div>
-  );
-}
-
-function ThinkingBlock({ content }: { content: string }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-        <ChevronRight
-          className={cn(
-            "h-3 w-3 transition-transform",
-            open && "rotate-90"
-          )}
-        />
-        <Brain className="h-3 w-3" />
-        <span>Thinking</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="mt-1.5 pl-5 text-xs text-muted-foreground italic whitespace-pre-wrap max-h-[300px] overflow-y-auto">
-          {content}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
   );
 }

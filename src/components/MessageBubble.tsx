@@ -1,15 +1,14 @@
 import type { Message, ContentBlock } from "@/types/conversations";
 import { MessageContent } from "./MessageContent";
 import { cn } from "@/lib/utils";
-import { Trash2, User, Bot } from "lucide-react";
+import { Trash2, User, Bot, Pencil, Terminal, Search, Eye, Globe, FileText, Wrench, Brain, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
-import { Wrench, Terminal } from "lucide-react";
+import { useState } from "react";
 
 interface MessageBubbleProps {
   message: Message;
@@ -30,34 +29,34 @@ function formatTime(timestamp: string): string {
 
 function getTextBlocks(content: string | ContentBlock[]): ContentBlock[] {
   if (typeof content === "string") return [{ type: "text", text: content }];
-  return content.filter((b) => b.type === "text" || b.type === "thinking");
+  return content.filter((b) => b.type === "text");
 }
 
-function getToolBlocks(content: string | ContentBlock[]): ContentBlock[] {
+function getActionBlocks(content: string | ContentBlock[]): ContentBlock[] {
   if (typeof content === "string") return [];
-  return content.filter((b) => b.type === "tool_use" || b.type === "tool_result");
+  return content.filter((b) => b.type === "tool_use" || b.type === "tool_result" || b.type === "thinking");
 }
 
-function getToolBrief(block: ContentBlock): string {
-  if (block.type === "tool_use") {
-    const input = block.input;
-    if (!input) return "";
-    if ("command" in input && typeof input.command === "string") return input.command.slice(0, 120);
-    if ("file_path" in input && typeof input.file_path === "string") return input.file_path;
-    if ("pattern" in input && typeof input.pattern === "string") return input.pattern;
-    if ("query" in input && typeof input.query === "string") return input.query.slice(0, 120);
-    if ("description" in input && typeof input.description === "string") return input.description.slice(0, 120);
-    if ("prompt" in input && typeof input.prompt === "string") return input.prompt.slice(0, 120);
-  }
-  if (block.type === "tool_result") {
-    let text = "";
-    if (typeof block.content === "string") {
-      text = block.content;
-    } else if (Array.isArray(block.content)) {
-      const first = (block.content as Array<{ type?: string; text?: string }>).find((c) => c.type === "text");
-      text = first?.text || "";
-    }
-    return text.slice(0, 100);
+function getToolInput(block: ContentBlock): string {
+  if (block.type !== "tool_use") return "";
+  const input = block.input;
+  if (!input) return "";
+  if ("command" in input && typeof input.command === "string") return input.command;
+  if ("file_path" in input && typeof input.file_path === "string") return input.file_path;
+  if ("pattern" in input && typeof input.pattern === "string") return input.pattern;
+  if ("query" in input && typeof input.query === "string") return input.query;
+  if ("description" in input && typeof input.description === "string") return input.description;
+  if ("prompt" in input && typeof input.prompt === "string") return input.prompt;
+  if ("old_string" in input && typeof input.old_string === "string") return input.old_string;
+  return "";
+}
+
+function getToolResultText(block: ContentBlock): string {
+  if (block.type !== "tool_result") return "";
+  if (typeof block.content === "string") return block.content;
+  if (Array.isArray(block.content)) {
+    const first = (block.content as Array<{ type?: string; text?: string }>).find((c) => c.type === "text");
+    return first?.text || "";
   }
   return "";
 }
@@ -65,8 +64,8 @@ function getToolBrief(block: ContentBlock): string {
 export function MessageBubble({ message, onDelete }: MessageBubbleProps) {
   const isUser = message.type === "user";
   const textBlocks = getTextBlocks(message.message.content);
-  const toolBlocks = getToolBlocks(message.message.content);
-  const hasText = textBlocks.some((b) => (b.type === "text" && b.text?.trim()) || b.type === "thinking");
+  const actionBlocks = getActionBlocks(message.message.content);
+  const hasText = textBlocks.some((b) => b.type === "text" && b.text?.trim());
 
   return (
     <div className="group relative">
@@ -120,19 +119,21 @@ export function MessageBubble({ message, onDelete }: MessageBubbleProps) {
         </div>
       )}
 
-      {/* Tool blocks - shown as compact standalone items */}
-      {toolBlocks.length > 0 && (
+      {/* Action blocks — tools + thinking */}
+      {actionBlocks.length > 0 && (
         <div className={cn("space-y-1", hasText ? "mt-1.5 ml-10" : "ml-10")}>
-          {toolBlocks.map((block, i) => (
-            <ToolItem key={i} block={block} />
+          {actionBlocks.map((block, i) => (
+            <ActionItem key={i} block={block} />
           ))}
         </div>
       )}
 
-      {/* Timestamp below */}
-      <div className={cn("text-[10px] text-muted-foreground mt-1", hasText ? (isUser ? "text-right mr-10" : "ml-10") : "ml-10")}>
-        {formatTime(message.timestamp)}
-      </div>
+      {/* Timestamp below — only on text messages */}
+      {hasText && (
+        <div className={cn("text-[10px] text-muted-foreground mt-1", isUser ? "text-right mr-10" : "ml-10")}>
+          {formatTime(message.timestamp)}
+        </div>
+      )}
 
       {/* Delete button for tool-only messages (no text bubble) */}
       {!hasText && (
@@ -152,28 +153,81 @@ export function MessageBubble({ message, onDelete }: MessageBubbleProps) {
   );
 }
 
-function ToolItem({ block }: { block: ContentBlock }) {
-  const brief = getToolBrief(block);
+function getToolIcon(block: ContentBlock) {
+  const name = block.type === "tool_use" ? block.name : undefined;
+  const iconClass = "h-3.5 w-3.5 shrink-0 mt-0.5";
+
+  switch (name) {
+    case "Bash":
+      return <Terminal className={iconClass} />;
+    case "Edit":
+    case "Write":
+    case "NotebookEdit":
+      return <Pencil className={iconClass} />;
+    case "Read":
+      return <Eye className={iconClass} />;
+    case "Grep":
+    case "Glob":
+      return <Search className={iconClass} />;
+    case "WebFetch":
+    case "WebSearch":
+      return <Globe className={iconClass} />;
+    case "Task":
+      return <FileText className={iconClass} />;
+    default:
+      // tool_result or unknown tool_use
+      return block.type === "tool_result"
+        ? <Terminal className={iconClass} />
+        : <Wrench className={iconClass} />;
+  }
+}
+
+function ActionItem({ block }: { block: ContentBlock }) {
+  if (block.type === "thinking") {
+    return <ThinkingItem content={block.thinking || ""} />;
+  }
+
   const isToolUse = block.type === "tool_use";
   const isError = block.type === "tool_result" && block.is_error;
+  const content = isToolUse ? getToolInput(block) : getToolResultText(block);
+
+  if (!content) return null;
 
   return (
-    <div className="flex items-center gap-1.5 text-xs text-muted-foreground py-0.5">
-      {isToolUse ? (
-        <Wrench className="h-3 w-3 shrink-0" />
-      ) : (
-        <Terminal className="h-3 w-3 shrink-0" />
-      )}
-      {isToolUse && block.name && (
-        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-          {block.name}
-        </Badge>
-      )}
-      {brief && (
-        <span className={cn("truncate", isError && "text-destructive")}>
-          {brief}
-        </span>
-      )}
+    <div className="flex gap-2 text-xs text-muted-foreground py-0.5">
+      {getToolIcon(block)}
+      <pre className={cn(
+        "flex-1 bg-muted/50 rounded p-2 overflow-x-auto text-[11px] whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto",
+        isError && "text-destructive"
+      )}>
+        <code>{content}</code>
+      </pre>
+    </div>
+  );
+}
+
+function ThinkingItem({ content }: { content: string }) {
+  const [open, setOpen] = useState(false);
+
+  if (!content) return null;
+
+  return (
+    <div className="flex gap-2 text-xs text-muted-foreground py-0.5">
+      <Brain className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <button
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-1 hover:text-foreground transition-colors"
+        >
+          <ChevronRight className={cn("h-3 w-3 transition-transform", open && "rotate-90")} />
+          <span>Thinking</span>
+        </button>
+        {open && (
+          <pre className="mt-1 bg-muted/50 rounded p-2 text-[11px] whitespace-pre-wrap break-all max-h-[300px] overflow-y-auto italic">
+            <code>{content}</code>
+          </pre>
+        )}
+      </div>
     </div>
   );
 }

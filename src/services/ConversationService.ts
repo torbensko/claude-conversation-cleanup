@@ -9,6 +9,53 @@ function stripXmlTags(text: string): string {
   return text.replace(/<[^>]+>/g, "").trim();
 }
 
+const IDE_NOISE_PATTERNS = [
+  /^The user opened the file .+$/,
+  /^This may or may not be related to the current task\.?$/,
+  /^The user is currently viewing/,
+  /^The user's cursor is/,
+  /^The user has the following file/,
+];
+
+function isIdeNoise(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  return IDE_NOISE_PATTERNS.some((p) => p.test(trimmed));
+}
+
+function cleanPrompt(raw: string): string {
+  // Strip XML tags, then filter out IDE noise lines
+  const stripped = stripXmlTags(raw);
+  const lines = stripped.split(/\n+/).filter((l) => !isIdeNoise(l));
+  const cleaned = lines.join(" ").trim();
+  return cleaned || stripped;
+}
+
+function reconstructPath(dirName: string): string {
+  const home = homedir();
+  const homePrefix = "-" + home.slice(1).replace(/\//g, "-");
+  if (!dirName.startsWith(homePrefix)) return dirName;
+  const remainder = dirName.slice(homePrefix.length);
+  if (!remainder || remainder === "-") return home;
+  const encoded = remainder.slice(1);
+  if (!encoded) return home;
+  const segments = encoded.split("-");
+  let resolved = home;
+  let i = 0;
+  while (i < segments.length) {
+    let matched = false;
+    for (let end = segments.length; end > i; end--) {
+      const candidate = segments.slice(i, end).join("-");
+      const testPath = path.join(resolved, candidate);
+      try {
+        if (fs.existsSync(testPath)) { resolved = testPath; i = end; matched = true; break; }
+      } catch { /* ignore */ }
+    }
+    if (!matched) { resolved = path.join(resolved, segments.slice(i).join("-")); break; }
+  }
+  return resolved;
+}
+
 function decodeProjectName(dirName: string): string {
   // Try to read sessions-index.json for originalPath first
   const indexPath = path.join(CLAUDE_PROJECTS_DIR, dirName, "sessions-index.json");
@@ -20,9 +67,7 @@ function decodeProjectName(dirName: string): string {
   } catch {
     // fall through
   }
-  // Heuristic: last segment after splitting on common path patterns
-  const parts = dirName.replace(/^-/, "").split("-");
-  return parts[parts.length - 1] || dirName;
+  return path.basename(reconstructPath(dirName));
 }
 
 function readSessionsIndex(projectDir: string): ConversationEntry[] {
@@ -35,15 +80,15 @@ function readSessionsIndex(projectDir: string): ConversationEntry[] {
   try {
     const indexData = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
     const originalPath: string = indexData.originalPath || "";
-    const projectName = path.basename(originalPath);
+    const projectName = path.basename(originalPath) || decodeProjectName(path.basename(projectDir));
 
-    return (indexData.entries || [])
+    const indexedEntries: ConversationEntry[] = (indexData.entries || [])
       .filter((entry: Record<string, unknown>) => !entry.isSidechain)
       .map((entry: Record<string, unknown>) => ({
         sessionId: entry.sessionId as string,
         fullPath: entry.fullPath as string,
-        firstPrompt: stripXmlTags((entry.firstPrompt as string) || "No prompt"),
-        summary: entry.summary as string | undefined,
+        firstPrompt: cleanPrompt((entry.firstPrompt as string) || "No prompt"),
+        summary: entry.summary ? cleanPrompt(entry.summary as string) : undefined,
         messageCount: (entry.messageCount as number) || 0,
         created: entry.created as string,
         modified: entry.modified as string,
@@ -52,21 +97,38 @@ function readSessionsIndex(projectDir: string): ConversationEntry[] {
         projectName,
         isSidechain: false,
       }));
+
+    // Pick up JSONL files not listed in the index
+    const indexedIds = new Set(indexedEntries.map((e) => e.sessionId));
+    const allJsonl = fs.readdirSync(projectDir).filter(
+      (f) => f.endsWith(".jsonl") && !f.includes(path.sep)
+    );
+    const missingFiles = allJsonl.filter(
+      (f) => !indexedIds.has(f.replace(".jsonl", ""))
+    );
+
+    if (missingFiles.length > 0) {
+      const scanned = scanJsonlFilesWithNames(projectDir, missingFiles, projectName);
+      indexedEntries.push(...scanned);
+    }
+
+    return indexedEntries;
   } catch {
     return scanJsonlFiles(projectDir);
   }
 }
 
 function scanJsonlFiles(projectDir: string): ConversationEntry[] {
+  const files = fs.readdirSync(projectDir).filter(
+    (f) => f.endsWith(".jsonl") && !f.includes(path.sep)
+  );
+  const dirName = path.basename(projectDir);
+  const projectName = decodeProjectName(dirName);
+  return scanJsonlFilesWithNames(projectDir, files, projectName);
+}
+
+function scanJsonlFilesWithNames(projectDir: string, jsonlFiles: string[], projectName: string): ConversationEntry[] {
   try {
-    const files = fs.readdirSync(projectDir);
-    const jsonlFiles = files.filter(
-      (f) => f.endsWith(".jsonl") && !f.includes(path.sep)
-    );
-
-    const dirName = path.basename(projectDir);
-    const projectName = decodeProjectName(dirName);
-
     return jsonlFiles.map((file) => {
       const fullPath = path.join(projectDir, file);
       const stat = fs.statSync(fullPath);
@@ -87,11 +149,17 @@ function scanJsonlFiles(projectDir: string): ConversationEntry[] {
             if (firstPrompt === "No prompt" && parsed.type === "user" && !parsed.isMeta && parsed.message?.content) {
               const c = parsed.message.content;
               if (typeof c === "string") {
-                firstPrompt = stripXmlTags(c).slice(0, 100);
+                const cleaned = cleanPrompt(c);
+                if (cleaned) firstPrompt = cleaned.slice(0, 100);
               } else if (Array.isArray(c)) {
-                const textBlock = c.find((b: { type: string }) => b.type === "text");
-                if (textBlock?.text) {
-                  firstPrompt = stripXmlTags(textBlock.text).slice(0, 100);
+                // Find first text block that isn't IDE noise
+                for (const b of c as Array<{ type: string; text?: string }>) {
+                  if (b.type !== "text" || !b.text) continue;
+                  const cleaned = cleanPrompt(b.text);
+                  if (cleaned && !isIdeNoise(cleaned)) {
+                    firstPrompt = cleaned.slice(0, 100);
+                    break;
+                  }
                 }
               }
             }
