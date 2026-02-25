@@ -24,7 +24,7 @@ export function ConversationList() {
       const result = await window.api.repairIndexes();
       if (result.addedEntries > 0) {
         toast.success(`Repaired ${result.repairedProjects} project(s)`, {
-          description: `Added ${result.addedEntries} missing conversation(s) to VS Code index`,
+          description: `Fixed ${result.addedEntries} conversation(s) in VS Code index`,
         });
       }
       setMissingCount(0);
@@ -84,7 +84,7 @@ export function ConversationList() {
             <AlertTriangle className="h-3.5 w-3.5 text-yellow-500 mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xs text-muted-foreground">
-                {missingCount} conversation{missingCount !== 1 ? "s" : ""} missing from VS Code index
+                {missingCount} conversation{missingCount !== 1 ? "s" : ""} need{missingCount === 1 ? "s" : ""} repair in VS Code index
               </p>
               <Button
                 variant="link"

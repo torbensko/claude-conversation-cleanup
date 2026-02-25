@@ -84,19 +84,29 @@ function readSessionsIndex(projectDir: string): ConversationEntry[] {
 
     const indexedEntries: ConversationEntry[] = (indexData.entries || [])
       .filter((entry: Record<string, unknown>) => !entry.isSidechain)
-      .map((entry: Record<string, unknown>) => ({
-        sessionId: entry.sessionId as string,
-        fullPath: entry.fullPath as string,
-        firstPrompt: cleanPrompt((entry.firstPrompt as string) || "No prompt"),
-        summary: entry.customTitle ? cleanPrompt(entry.customTitle as string) : entry.summary ? cleanPrompt(entry.summary as string) : undefined,
-        messageCount: (entry.messageCount as number) || 0,
-        created: entry.created as string,
-        modified: entry.modified as string,
-        gitBranch: entry.gitBranch as string | undefined,
-        projectPath: (entry.projectPath as string) || originalPath,
-        projectName,
-        isSidechain: false,
-      }));
+      .map((entry: Record<string, unknown>) => {
+        let messageCount = (entry.messageCount as number) || 0;
+        const fullPath = entry.fullPath as string;
+
+        // Recount from JSONL if the index claims 0 messages
+        if (messageCount === 0 && fullPath) {
+          messageCount = countMessagesInFile(fullPath);
+        }
+
+        return {
+          sessionId: entry.sessionId as string,
+          fullPath,
+          firstPrompt: cleanPrompt((entry.firstPrompt as string) || "No prompt"),
+          summary: entry.customTitle ? cleanPrompt(entry.customTitle as string) : entry.summary ? cleanPrompt(entry.summary as string) : undefined,
+          messageCount,
+          created: entry.created as string,
+          modified: entry.modified as string,
+          gitBranch: entry.gitBranch as string | undefined,
+          projectPath: (entry.projectPath as string) || originalPath,
+          projectName,
+          isSidechain: false,
+        };
+      });
 
     // Pick up JSONL files not listed in the index
     const indexedIds = new Set(indexedEntries.map((e) => e.sessionId));
@@ -143,7 +153,7 @@ function scanJsonlFilesWithNames(projectDir: string, jsonlFiles: string[], proje
           if (!line.trim()) continue;
           try {
             const parsed = JSON.parse(line);
-            if ((parsed.type === "user" || parsed.type === "assistant") && !parsed.isMeta && !parsed.isSidechain) {
+            if (parsed.type === "user" && !parsed.isMeta && !parsed.isSidechain) {
               messageCount++;
             }
             if (firstPrompt === "No prompt" && parsed.type === "user" && !parsed.isMeta && parsed.message?.content) {
@@ -190,6 +200,27 @@ function scanJsonlFilesWithNames(projectDir: string, jsonlFiles: string[], proje
   }
 }
 
+function countMessagesInFile(filePath: string): number {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    let count = 0;
+    for (const line of content.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.type === "user" && !parsed.isMeta && !parsed.isSidechain) {
+          count++;
+        }
+      } catch {
+        // skip
+      }
+    }
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
 function hasUserMessages(filePath: string): boolean {
   try {
     const content = fs.readFileSync(filePath, "utf-8");
@@ -230,6 +261,24 @@ function getMissingJsonlFiles(projectDir: string): string[] {
     .filter((f) => hasUserMessages(path.join(projectDir, f)));
 }
 
+function getStaleCountEntries(projectDir: string): Array<Record<string, unknown>> {
+  const indexPath = path.join(projectDir, "sessions-index.json");
+  if (!fs.existsSync(indexPath)) return [];
+  try {
+    const indexData = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
+    return ((indexData.entries || []) as Array<Record<string, unknown>>).filter((e) => {
+      if (e.isSidechain) return false;
+      const fp = e.fullPath as string;
+      if (!fp || !fs.existsSync(fp)) return false;
+      const indexedCount = (e.messageCount as number) || 0;
+      const realCount = countMessagesInFile(fp);
+      return indexedCount !== realCount;
+    });
+  } catch {
+    return [];
+  }
+}
+
 export function checkIndexHealth(): { missingCount: number } {
   if (!fs.existsSync(CLAUDE_PROJECTS_DIR)) {
     return { missingCount: 0 };
@@ -241,6 +290,7 @@ export function checkIndexHealth(): { missingCount: number } {
     if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const projectDir = path.join(CLAUDE_PROJECTS_DIR, entry.name);
     missingCount += getMissingJsonlFiles(projectDir).length;
+    missingCount += getStaleCountEntries(projectDir).length;
   }
 
   return { missingCount };
@@ -271,9 +321,23 @@ export function repairAllIndexes(): { repairedProjects: number; addedEntries: nu
 
     const entries = (indexData.entries || []) as Array<Record<string, unknown>>;
 
+    // Fix existing entries with stale messageCount
+    let fixedStale = false;
+    for (const entry of entries) {
+      if (entry.isSidechain) continue;
+      const fp = entry.fullPath as string;
+      if (!fp || !fs.existsSync(fp)) continue;
+      const realCount = countMessagesInFile(fp);
+      if ((entry.messageCount as number || 0) !== realCount) {
+        entry.messageCount = realCount;
+        fixedStale = true;
+        addedEntries++;
+      }
+    }
+
     const missingFiles = getMissingJsonlFiles(projectDir);
 
-    if (missingFiles.length === 0) continue;
+    if (missingFiles.length === 0 && !fixedStale) continue;
 
     for (const file of missingFiles) {
       const fullPath = path.join(projectDir, file);
@@ -289,7 +353,7 @@ export function repairAllIndexes(): { repairedProjects: number; addedEntries: nu
           if (!line.trim()) continue;
           try {
             const parsed = JSON.parse(line);
-            if ((parsed.type === "user" || parsed.type === "assistant") && !parsed.isMeta && !parsed.isSidechain) {
+            if (parsed.type === "user" && !parsed.isMeta && !parsed.isSidechain) {
               messageCount++;
             }
             if (firstPrompt === "No prompt" && parsed.type === "user" && !parsed.isMeta && parsed.message?.content) {

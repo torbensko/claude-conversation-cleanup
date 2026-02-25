@@ -1,7 +1,7 @@
 import type { Message, ContentBlock } from "@/types/conversations";
 import { MessageContent } from "./MessageContent";
 import { cn } from "@/lib/utils";
-import { Trash2, User, Bot, Pencil, Terminal, Search, Eye, Globe, FileText, Wrench, Brain, ChevronRight } from "lucide-react";
+import { Trash2, User, Bot, Pencil, Terminal, Search, Eye, Globe, FileText, Wrench, Brain, ChevronRight, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -30,6 +30,14 @@ function formatTime(timestamp: string): string {
 function getTextBlocks(content: string | ContentBlock[]): ContentBlock[] {
   if (typeof content === "string") return [{ type: "text", text: content }];
   return content.filter((b) => b.type === "text" || b.type === "image");
+}
+
+function getRawMarkdown(content: string | ContentBlock[]): string {
+  if (typeof content === "string") return content;
+  return content
+    .filter((b) => b.type === "text")
+    .map((b) => b.text || "")
+    .join("\n\n");
 }
 
 function getActionBlocks(content: string | ContentBlock[]): ContentBlock[] {
@@ -62,10 +70,19 @@ function getToolResultText(block: ContentBlock): string {
 }
 
 export function MessageBubble({ message, onDelete }: MessageBubbleProps) {
+  const [copied, setCopied] = useState(false);
   const isUser = message.type === "user";
   const textBlocks = getTextBlocks(message.message.content);
   const actionBlocks = getActionBlocks(message.message.content);
   const hasText = textBlocks.some((b) => (b.type === "text" && b.text?.trim()) || b.type === "image");
+
+  const handleCopy = () => {
+    const raw = getRawMarkdown(message.message.content);
+    navigator.clipboard.writeText(raw).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
 
   return (
     <div className="group relative">
@@ -103,18 +120,31 @@ export function MessageBubble({ message, onDelete }: MessageBubbleProps) {
           >
             <MessageContent content={textBlocks} isUser={isUser} />
 
-            {/* Delete button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-destructive text-white hover:bg-destructive/90 rounded-full"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
+            {/* Hover actions */}
+            <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 bg-muted text-muted-foreground hover:bg-muted/80 rounded-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCopy();
+                }}
+              >
+                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 bg-destructive text-white hover:bg-destructive/90 rounded-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
         </div>
       )}
