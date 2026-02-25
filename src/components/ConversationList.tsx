@@ -1,7 +1,6 @@
 import { useConversations } from "@/hooks/useConversations";
 import { useAppState } from "@/contexts/AppStateContext";
 import { ConversationItem } from "./ConversationItem";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function ConversationList() {
@@ -38,7 +37,7 @@ export function ConversationList() {
   }
 
   return (
-    <ScrollArea className="h-full">
+    <div className="h-full overflow-y-auto">
       <div className="space-y-1 p-2">
         {filtered.map((convo) => (
           <ConversationItem
@@ -49,6 +48,6 @@ export function ConversationList() {
           />
         ))}
       </div>
-    </ScrollArea>
+    </div>
   );
 }
