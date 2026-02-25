@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GitBranch, MessageSquare } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 
 export function MessagePanel() {
@@ -15,6 +15,13 @@ export function MessagePanel() {
     selectedConversation?.fullPath ?? null
   );
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!loading && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [loading, selectedConversation]);
 
   if (!selectedConversation) {
     return (
@@ -78,7 +85,7 @@ export function MessagePanel() {
           ))}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
           <div className="p-4 space-y-3 pb-8">
             {messages.map((msg) => (
               <MessageBubble

@@ -73,25 +73,30 @@ function scanJsonlFiles(projectDir: string): ConversationEntry[] {
       const sessionId = file.replace(".jsonl", "");
 
       let firstPrompt = "No prompt";
+      let messageCount = 0;
       try {
         const content = fs.readFileSync(fullPath, "utf-8");
-        const lines = content.split("\n").slice(0, 20);
+        const lines = content.split("\n");
         for (const line of lines) {
           if (!line.trim()) continue;
-          const parsed = JSON.parse(line);
-          if (parsed.type === "user" && !parsed.isMeta && parsed.message?.content) {
-            const content = parsed.message.content;
-            if (typeof content === "string") {
-              firstPrompt = stripXmlTags(content).slice(0, 100);
-            } else if (Array.isArray(content)) {
-              const textBlock = content.find(
-                (b: { type: string }) => b.type === "text"
-              );
-              if (textBlock?.text) {
-                firstPrompt = stripXmlTags(textBlock.text).slice(0, 100);
+          try {
+            const parsed = JSON.parse(line);
+            if ((parsed.type === "user" || parsed.type === "assistant") && !parsed.isMeta && !parsed.isSidechain) {
+              messageCount++;
+            }
+            if (firstPrompt === "No prompt" && parsed.type === "user" && !parsed.isMeta && parsed.message?.content) {
+              const c = parsed.message.content;
+              if (typeof c === "string") {
+                firstPrompt = stripXmlTags(c).slice(0, 100);
+              } else if (Array.isArray(c)) {
+                const textBlock = c.find((b: { type: string }) => b.type === "text");
+                if (textBlock?.text) {
+                  firstPrompt = stripXmlTags(textBlock.text).slice(0, 100);
+                }
               }
             }
-            break;
+          } catch {
+            // skip unparseable line
           }
         }
       } catch {
@@ -103,7 +108,7 @@ function scanJsonlFiles(projectDir: string): ConversationEntry[] {
         fullPath,
         firstPrompt,
         summary: undefined,
-        messageCount: 0,
+        messageCount,
         created: stat.birthtime.toISOString(),
         modified: stat.mtime.toISOString(),
         gitBranch: undefined,
