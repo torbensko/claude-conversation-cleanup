@@ -243,15 +243,16 @@ function hasUserMessages(filePath: string): boolean {
 
 function getMissingJsonlFiles(projectDir: string): string[] {
   const indexPath = path.join(projectDir, "sessions-index.json");
+  // If there's no index file, VS Code scans JSONL files directly — nothing is "missing"
+  if (!fs.existsSync(indexPath)) return [];
+
   let indexedIds = new Set<string>();
-  if (fs.existsSync(indexPath)) {
-    try {
-      const indexData = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
-      const entries = (indexData.entries || []) as Array<Record<string, unknown>>;
-      indexedIds = new Set(entries.map((e) => e.sessionId as string));
-    } catch {
-      // treat as empty
-    }
+  try {
+    const indexData = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
+    const entries = (indexData.entries || []) as Array<Record<string, unknown>>;
+    indexedIds = new Set(entries.map((e) => e.sessionId as string));
+  } catch {
+    // treat as empty
   }
 
   return fs
