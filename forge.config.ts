@@ -1,5 +1,6 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerZIP } from '@electron-forge/maker-zip';
+import { MakerDMG } from '@electron-forge/maker-dmg';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import path from 'path';
 
@@ -9,10 +10,26 @@ const config: ForgeConfig = {
     executableName: 'claude-cleanup',
     asar: false,
     icon: path.resolve(__dirname, 'build', 'icon'),
+    osxSign: {
+      optionsForFile: () => ({
+        entitlements: 'entitlements.plist',
+        'entitlements-inherit': 'entitlements.plist',
+      }),
+    },
+    osxNotarize: process.env.APPLE_ID && process.env.APPLE_ID_PASSWORD && process.env.APPLE_TEAM_ID
+      ? {
+          appleId: process.env.APPLE_ID,
+          appleIdPassword: process.env.APPLE_ID_PASSWORD,
+          teamId: process.env.APPLE_TEAM_ID,
+        }
+      : undefined,
   },
   rebuildConfig: {},
   makers: [
-    new MakerZIP({}, ['darwin', 'win32', 'linux']),
+    new MakerZIP({}, ['darwin']),
+    new MakerDMG({
+      format: 'ULFO',
+    }),
   ],
   plugins: [
     new VitePlugin({
