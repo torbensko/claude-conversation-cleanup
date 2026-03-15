@@ -97,7 +97,7 @@ function readSessionsIndex(projectDir: string): ConversationEntry[] {
           sessionId: entry.sessionId as string,
           fullPath,
           firstPrompt: cleanPrompt((entry.firstPrompt as string) || "No prompt"),
-          summary: entry.customTitle ? cleanPrompt(entry.customTitle as string) : entry.summary ? cleanPrompt(entry.summary as string) : undefined,
+          summary: readCustomTitle(fullPath) || (entry.customTitle ? cleanPrompt(entry.customTitle as string) : entry.summary ? cleanPrompt(entry.summary as string) : undefined),
           messageCount,
           created: entry.created as string,
           modified: entry.modified as string,
@@ -137,6 +137,28 @@ function scanJsonlFiles(projectDir: string): ConversationEntry[] {
   return scanJsonlFilesWithNames(projectDir, files, projectName);
 }
 
+function readCustomTitle(filePath: string): string | undefined {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    let customTitle: string | undefined;
+    let aiTitle: string | undefined;
+    for (const line of content.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.type === "custom-title" && parsed.customTitle) {
+          customTitle = parsed.customTitle;
+        } else if (parsed.type === "ai-title" && parsed.aiTitle) {
+          aiTitle = parsed.aiTitle;
+        }
+      } catch { /* skip */ }
+    }
+    return customTitle || aiTitle;
+  } catch {
+    return undefined;
+  }
+}
+
 function scanJsonlFilesWithNames(projectDir: string, jsonlFiles: string[], projectName: string): ConversationEntry[] {
   try {
     return jsonlFiles.map((file) => {
@@ -145,6 +167,7 @@ function scanJsonlFilesWithNames(projectDir: string, jsonlFiles: string[], proje
       const sessionId = file.replace(".jsonl", "");
 
       let firstPrompt = "No prompt";
+      let summary: string | undefined;
       let messageCount = 0;
       try {
         const content = fs.readFileSync(fullPath, "utf-8");
@@ -153,6 +176,11 @@ function scanJsonlFilesWithNames(projectDir: string, jsonlFiles: string[], proje
           if (!line.trim()) continue;
           try {
             const parsed = JSON.parse(line);
+            if (parsed.type === "custom-title" && parsed.customTitle) {
+              summary = parsed.customTitle;
+            } else if (parsed.type === "ai-title" && parsed.aiTitle && !summary) {
+              summary = parsed.aiTitle;
+            }
             if (parsed.type === "user" && !parsed.isMeta && !parsed.isSidechain) {
               messageCount++;
             }
@@ -185,7 +213,7 @@ function scanJsonlFilesWithNames(projectDir: string, jsonlFiles: string[], proje
         sessionId,
         fullPath,
         firstPrompt,
-        summary: undefined,
+        summary,
         messageCount,
         created: stat.birthtime.toISOString(),
         modified: stat.mtime.toISOString(),

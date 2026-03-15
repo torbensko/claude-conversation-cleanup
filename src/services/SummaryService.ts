@@ -1,5 +1,4 @@
 import * as fs from "fs";
-import * as path from "path";
 import Anthropic from "@anthropic-ai/sdk";
 
 function stripXmlTags(text: string): string {
@@ -68,7 +67,7 @@ export async function generateSummary(
   apiKey: string,
   filePath: string,
   sessionId: string,
-  projectDir: string
+  _projectDir: string
 ): Promise<{ success: boolean; summary?: string; error?: string }> {
   const userMessages = extractUserMessages(filePath);
 
@@ -99,8 +98,8 @@ export async function generateSummary(
       return { success: false, error: "Empty response from API" };
     }
 
-    // Write summary back to sessions-index.json
-    writeSummaryToIndex(projectDir, sessionId, summary, filePath);
+    // Write title to JSONL file (same format as VS Code extension)
+    writeCustomTitle(filePath, sessionId, summary);
 
     return { success: true, summary };
   } catch (err: unknown) {
@@ -109,43 +108,11 @@ export async function generateSummary(
   }
 }
 
-function writeSummaryToIndex(
-  projectDir: string,
+function writeCustomTitle(
+  filePath: string,
   sessionId: string,
-  summary: string,
-  filePath: string
+  title: string,
 ): void {
-  const indexPath = path.join(projectDir, "sessions-index.json");
-
-  let indexData: Record<string, unknown> = { version: 1, entries: [] };
-
-  if (fs.existsSync(indexPath)) {
-    try {
-      indexData = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
-    } catch {
-      // If corrupt, start fresh but preserve what we can
-    }
-  }
-
-  const entries = (indexData.entries || []) as Array<Record<string, unknown>>;
-  const existing = entries.find((e) => e.sessionId === sessionId);
-
-  if (existing) {
-    existing.customTitle = summary;
-  } else {
-    // Add a minimal entry for sessions missing from the index
-    const stat = fs.existsSync(filePath) ? fs.statSync(filePath) : null;
-    entries.push({
-      sessionId,
-      fullPath: filePath,
-      customTitle: summary,
-      messageCount: 0,
-      created: stat?.birthtime.toISOString() || new Date().toISOString(),
-      modified: stat?.mtime.toISOString() || new Date().toISOString(),
-      isSidechain: false,
-    });
-  }
-
-  indexData.entries = entries;
-  fs.writeFileSync(indexPath, JSON.stringify(indexData, null, 2), "utf-8");
+  const entry = { type: "custom-title", sessionId, customTitle: title };
+  fs.appendFileSync(filePath, JSON.stringify(entry) + "\n");
 }
