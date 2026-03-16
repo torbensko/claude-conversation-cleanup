@@ -43,9 +43,12 @@ export function Sidebar() {
       {/* App title + mode toggle + settings */}
       <div className="px-3 pt-3 pb-1 shrink-0 space-y-1">
         <div className="flex items-center justify-between px-1">
-          <h1 className="text-sm font-semibold text-foreground">
-            Claude Cleanup
-          </h1>
+          <div>
+            <h1 className="text-sm font-semibold text-foreground">
+              Claude Cleanup
+            </h1>
+            <p className="text-[10px] text-muted-foreground">v{__APP_VERSION__}</p>
+          </div>
           <Dialog>
             <DialogTrigger asChild>
               <Button variant="ghost" size="icon" className="h-6 w-6">

@@ -62,7 +62,7 @@ function createWindow() {
   });
 
   if (isDev) {
-    const devServerUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5175";
+    const devServerUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5391";
     waitForServer(devServerUrl).then((isReady) => {
       if (isReady) {
         win.loadURL(devServerUrl);
